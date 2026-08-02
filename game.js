@@ -49,7 +49,20 @@ const COLORS = {
     '#FF9F0A','#AC8E68',
   ],
 };
-const POWERUP_TYPES = ['shield','boost','magnet','star'];
+const POWERUP_TYPES = ['shield','boost','magnet','star','nitro','freeze','coin','repair'];
+// Rarity weighting — higher weight = more common
+const PU_WEIGHTS = { shield:18, boost:18, magnet:16, star:12, nitro:14, freeze:12, coin:16, repair:6 };
+function pickPowerUpType() {
+  const total = POWERUP_TYPES.reduce((s, t) => s + (PU_WEIGHTS[t] || 10), 0);
+  let r = Math.random() * total;
+  for (const t of POWERUP_TYPES) {
+    r -= (PU_WEIGHTS[t] || 10);
+    if (r <= 0) return t;
+  }
+  return POWERUP_TYPES[POWERUP_TYPES.length - 1];
+}
+// Durations (in frames @60fps) for timed power-ups
+const PU_DURATIONS = { boost:300, magnet:180, star:240, nitro:240, freeze:300 };
 
 // ─── GAME STATE ──────────────────────────────────────────────────────
 const G = {
@@ -79,7 +92,7 @@ const G = {
   explosions:   [],
   stars:        [],
   cityBuildings:[],
-  activePUs:    { boost:0, magnet:0, star:0 },
+  activePUs:    { boost:0, magnet:0, star:0, nitro:0, freeze:0 },
   invincible:   false,
   keys:         {},
   laneChangeCD: 0,
@@ -475,6 +488,10 @@ const PU_CONFIG = {
   boost:  { icon:'⚡',  color:'#FFD60A', label:'BOOST',   bgColor:'rgba(255,214,10,0.15)' },
   magnet: { icon:'🧲',  color:'#0A84FF', label:'MAGNET',  bgColor:'rgba(10,132,255,0.15)' },
   star:   { icon:'⭐',  color:'#BF5AF2', label:'STAR',    bgColor:'rgba(191,90,242,0.15)' },
+  nitro:  { icon:'🚀', color:'#FF375F', label:'NITRO',   bgColor:'rgba(255,55,95,0.15)'  },
+  freeze: { icon:'❄️', color:'#5AC8FA', label:'FREEZE',  bgColor:'rgba(90,200,250,0.15)' },
+  coin:   { icon:'💰', color:'#FFB800', label:'BONUS',   bgColor:'rgba(255,184,0,0.15)'  },
+  repair: { icon:'🔧', color:'#FF6B2B', label:'REPAIR',  bgColor:'rgba(255,107,43,0.15)' },
 };
 
 function drawPowerUp(pu, frameNum) {
@@ -606,7 +623,7 @@ function spawnObstacle() {
 }
 
 function spawnPowerUp() {
-  const type = POWERUP_TYPES[rndI(0, POWERUP_TYPES.length - 1)];
+  const type = pickPowerUpType();
   const lane = rndI(0, LANES - 1);
   G.powerUps.push({
     type, lane,
@@ -711,7 +728,7 @@ function collectPowerUp(pu) {
   pu.collected = true;
   const cfg = PU_CONFIG[pu.type];
   spawnCollectParticles(pu.screenX, pu.screenYpx, cfg.color);
-  showComboText(cfg.icon + ' ' + cfg.label + '!', cfg.color);
+  if (pu.type !== 'coin') showComboText(cfg.icon + ' ' + cfg.label + '!', cfg.color);
 
   switch(pu.type) {
     case 'shield':
@@ -728,9 +745,26 @@ function collectPowerUp(pu) {
       updatePowerUpHUD();
       break;
     case 'star':
-      G.activePUs.star = 240;  // 4 seconds
+      G.activePUs.star = PU_DURATIONS.star;  // 4 seconds
       G.invincible = true;
       updatePowerUpHUD();
+      break;
+    case 'nitro':
+      G.activePUs.nitro = PU_DURATIONS.nitro; // 4 seconds
+      G.nitroBoostSpeed = G.speed * 0.9;       // extra speed added on top of level speed
+      updatePowerUpHUD();
+      break;
+    case 'freeze':
+      G.activePUs.freeze = PU_DURATIONS.freeze; // 5 seconds
+      updatePowerUpHUD();
+      break;
+    case 'coin':
+      G.score += 250;
+      showComboText('💰 +250!', cfg.color);
+      break;
+    case 'repair':
+      G.health = MAX_HEALTH;
+      updateHealthUI();
       break;
   }
 }
@@ -745,11 +779,11 @@ function updatePowerUpHUD() {
     document.getElementById('screen-game').appendChild(el);
   }
   el.innerHTML = '';
-  ['boost','star','magnet'].forEach(type => {
+  ['boost','star','magnet','nitro','freeze'].forEach(type => {
     const rem = G.activePUs[type];
     if (rem <= 0) return;
     const cfg = PU_CONFIG[type];
-    const maxTime = type === 'boost' ? 300 : type === 'star' ? 240 : 180;
+    const maxTime = PU_DURATIONS[type] || 180;
     const pct = (rem / maxTime * 100).toFixed(1);
     const div = document.createElement('div');
     div.className = `pu-indicator ${type}`;
@@ -883,12 +917,13 @@ function gameLoop() {
     G.playerY = canvas.height * 0.82;
 
     // Update active power-up timers
-    ['boost','magnet','star'].forEach(type => {
+    ['boost','magnet','star','nitro','freeze'].forEach(type => {
       if (G.activePUs[type] > 0) {
         G.activePUs[type]--;
         if (G.activePUs[type] === 0) {
           if (type === 'boost')  { G.scoreMulti = 1; }
           if (type === 'star')   { G.invincible = false; }
+          if (type === 'nitro')  { G.nitroBoostSpeed = 0; }
           updatePowerUpHUD();
         }
       }
@@ -911,7 +946,9 @@ function gameLoop() {
     }
 
     // Move obstacles
-    const moveSpeed = G.speed / 60;
+    const effSpeed  = G.speed + (G.activePUs.nitro > 0 ? (G.nitroBoostSpeed || 0) : 0);
+    const freezeFac = G.activePUs.freeze > 0 ? 0.35 : 1;
+    const moveSpeed = effSpeed / 60 * freezeFac;
     G.obstacles.forEach(ob => {
       ob.screenY += moveSpeed * 0.018;
       const proj = projectToScreen(ob.lane, ob.screenY);
@@ -1016,9 +1053,10 @@ function resetGame() {
   G.particles    = [];
   G.spawnTimer   = 0;
   G.puSpawnTimer = 0;
-  G.invincible   = false;
-  G.activePUs    = { boost:0, magnet:0, star:0 };
-  _laneCooldown  = 0;
+  G.invincible     = false;
+  G.activePUs      = { boost:0, magnet:0, star:0, nitro:0, freeze:0 };
+  G.nitroBoostSpeed= 0;
+  _laneCooldown    = 0;
   generateCityBuildings();
   initStars();
   updateHealthUI();
