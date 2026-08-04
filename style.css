@@ -460,6 +460,10 @@ button { cursor: pointer; border: none; font-family: var(--font); }
 .boost-tag  { background: rgba(255,214,10,0.15); color: var(--yellow); }
 .magnet-tag { background: rgba(10,132,255,0.15); color: var(--blue); }
 .star-tag   { background: rgba(191,90,242,0.15); color: var(--purple); }
+.nitro-tag  { background: rgba(255,55,95,0.15);  color: #FF375F; }
+.freeze-tag { background: rgba(90,200,250,0.15); color: var(--blue); }
+.coin-tag   { background: rgba(255,184,0,0.15);  color: #FFB800; }
+.repair-tag { background: rgba(255,107,43,0.15); color: var(--orange); }
 
 /* LEADERBOARD */
 .lb-table {
@@ -521,6 +525,8 @@ button { cursor: pointer; border: none; font-family: var(--font); }
 .pu-indicator.boost  { border-color: rgba(255,214,10,0.5); color: var(--yellow); }
 .pu-indicator.star   { border-color: rgba(191,90,242,0.5); color: var(--purple); }
 .pu-indicator.magnet { border-color: rgba(10,132,255,0.5); color: var(--blue); }
+.pu-indicator.nitro   { border-color: rgba(255,55,95,0.5);  color: #FF375F; }
+.pu-indicator.freeze  { border-color: rgba(90,200,250,0.5); color: var(--blue); }
 .pu-timer-bar {
   width: 50px; height: 3px; background: rgba(255,255,255,0.1);
   border-radius: 2px; overflow: hidden;
